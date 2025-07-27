@@ -1,0 +1,136 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+try:
+    df_unemployment_india = pd.read_csv("Unemployment in India.csv")
+    df_unemployment_rate_upto_11_2020 = pd.read_csv("Unemployment_Rate_upto_11_2020.csv")
+except FileNotFoundError:
+    print("Please make sure the CSV files are in the same directory as this script.")
+    exit()
+
+
+def clean_data(df, date_col, unemployment_col, region_col):
+    if 'Area' in df.columns:
+        df.columns = [
+            'Region', 'Date', 'Frequency', 'Estimated Unemployment Rate (%)',
+            'Estimated Employed', 'Estimated Labour Participation Rate (%)',
+            'Area'
+        ]
+    elif 'Region.1' in df.columns and 'longitude' in df.columns and 'latitude' in df.columns:
+         df.columns = [
+            'Region', 'Date', 'Frequency', 'Estimated Unemployment Rate (%)',
+            'Estimated Employed', 'Estimated Labour Participation Rate (%)',
+            'Region_Category',
+            'longitude', 'latitude'
+        ]
+    else:
+        # Handle cases with unexpected column names or counts
+        print("Warning: Unexpected column structure. Skipping column renaming.")
+        return df
+
+
+    df['Date'] = pd.to_datetime(df[date_col], dayfirst=True)
+    df[unemployment_col] = pd.to_numeric(df[unemployment_col], errors='coerce')
+    df.dropna(subset=[unemployment_col, date_col, region_col], inplace=True)
+    return df
+
+df_unemployment_india = clean_data(df_unemployment_india, 'Date', 'Estimated Unemployment Rate (%)', 'Region')
+df_unemployment_rate_upto_11_2020 = clean_data(df_unemployment_rate_upto_11_2020, 'Date', 'Estimated Unemployment Rate (%)', 'Region')
+
+
+df = df_unemployment_rate_upto_11_2020.copy()
+
+
+df['Month_int'] = df['Date'].dt.month
+df['Month_name'] = df['Date'].dt.strftime('%b')
+df['Year'] = df['Date'].dt.year
+
+# --- Data Exploration and Visualization ---
+
+# 1. Overall Unemployment Rate Trend
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df, x='Date', y='Estimated Unemployment Rate (%)')
+plt.title('Overall Unemployment Rate Trend in India')
+plt.xlabel('Date')
+plt.ylabel('Estimated Unemployment Rate (%)')
+plt.grid(True)
+plt.show()
+
+# 2. Unemployment Rate by Region (Example: Average Unemployment Rate per Region)
+plt.figure(figsize=(14, 7))
+sns.barplot(data=df.groupby('Region')['Estimated Unemployment Rate (%)'].mean().sort_values(ascending=False).reset_index(),
+            x='Region', y='Estimated Unemployment Rate (%)', palette='viridis')
+plt.title('Average Unemployment Rate by Region')
+plt.xlabel('Region')
+plt.ylabel('Average Estimated Unemployment Rate (%)')
+plt.xticks(rotation=90)
+plt.grid(axis='y')
+plt.show()
+
+# 3. Impact of Covid-19 (Identifying the lockdown period and its effect)
+# Assuming Covid-19 impact starts significantly around March-April 2020
+df_2020 = df[df['Year'] == 2020]
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_2020, x='Month_name', y='Estimated Unemployment Rate (%)', hue='Region', palette='tab10')
+plt.title('Unemployment Rate in 2020 (Highlighting Covid-19 Impact)')
+plt.xlabel('Month')
+plt.ylabel('Estimated Unemployment Rate (%)')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.show()
+
+# Another way to visualize Covid-19 impact: compare pre- and post-lockdown
+df['Period'] = df['Date'].apply(lambda x: 'Pre-lockdown (Before Mar 2020)' if x < pd.to_datetime('2020-03-01') else 'Post-lockdown (Mar 2020 onwards)')
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=df, x='Period', y='Estimated Unemployment Rate (%)', palette='pastel')
+plt.title('Unemployment Rate: Pre- vs. Post-Lockdown')
+plt.xlabel('Period')
+plt.ylabel('Estimated Unemployment Rate (%)')
+plt.grid(axis='y')
+plt.show()
+
+# 4. Seasonal Trends (Monthly Average Unemployment Rate)
+plt.figure(figsize=(10, 5))
+sns.lineplot(data=df.groupby('Month_name')['Estimated Unemployment Rate (%)'].mean().reindex(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']).reset_index(),
+             x='Month_name', y='Estimated Unemployment Rate (%)', marker='o')
+plt.title('Monthly Average Unemployment Rate (Seasonal Trend)')
+plt.xlabel('Month')
+plt.ylabel('Average Estimated Unemployment Rate (%)')
+plt.grid(True)
+plt.show()
+
+# --- Identifying Key Patterns and Insights ---
+
+# You can print descriptive statistics
+print("\n--- Descriptive Statistics of Unemployment Rate ---")
+print(df['Estimated Unemployment Rate (%)'].describe())
+
+# Top 5 regions with highest average unemployment rate
+print("\n--- Top 5 Regions with Highest Average Unemployment Rate ---")
+print(df.groupby('Region')['Estimated Unemployment Rate (%)'].mean().nlargest(5))
+
+# Top 5 regions with lowest average unemployment rate
+print("\n--- Top 5 Regions with Lowest Average Unemployment Rate ---")
+print(df.groupby('Region')['Estimated Unemployment Rate (%)'].mean().nsmallest(5))
+
+# Impact of Covid-19: Percentage change in unemployment rate
+pre_lockdown_avg = df[df['Period'] == 'Pre-lockdown (Before Mar 2020)']['Estimated Unemployment Rate (%)'].mean()
+post_lockdown_avg = df[df['Period'] == 'Post-lockdown (Mar 2020 onwards)']['Estimated Unemployment Rate (%)'].mean()
+percentage_increase = ((post_lockdown_avg - pre_lockdown_avg) / pre_lockdown_avg) * 100
+print(f"\n--- Impact of Covid-19 (Pre- vs. Post-lockdown) ---")
+print(f"Average Unemployment Rate Pre-lockdown: {pre_lockdown_avg:.2f}%")
+print(f"Average Unemployment Rate Post-lockdown: {post_lockdown_avg:.2f}%")
+print(f"Percentage increase in unemployment rate: {percentage_increase:.2f}%")
+
+
+# Insights:
+print("\n--- Insights from Unemployment Analysis ---")
+print("1. **Covid-19 Impact**: The visualizations clearly show a significant spike in unemployment rates around April-May 2020, coinciding with the nationwide lockdown due to Covid-19. This indicates a strong negative impact of the pandemic on employment.")
+print("2. **Regional Disparities**: There are notable differences in unemployment rates across various regions. Some states consistently show higher or lower rates, suggesting the need for region-specific economic policies.")
+print("3. **Seasonal Trends**: The monthly average unemployment rates might reveal some seasonal patterns (e.g., due to agricultural cycles, festive seasons, or academic calendars). Further analysis with more years of data would solidify these trends.")
+print("4. **Policy Implications**:")
+print("   - **Targeted Support**: Policies should be tailored to support regions most affected by high unemployment.")
+print("   - **Economic Diversification**: Encourage diversification of economic activities to reduce vulnerability to sector-specific shocks (like those experienced during the pandemic).")
+print("   - **Skill Development**: Invest in skill development programs to equip the workforce with skills relevant to emerging industries, improving employability.")
+print("   - **Emergency Response**: Develop robust social safety nets and unemployment benefits to support citizens during economic crises like pandemics.")
